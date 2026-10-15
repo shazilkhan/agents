@@ -767,6 +767,26 @@ async def test_the_adapter_keeps_the_context_under_the_ids_the_framework_uses(du
     assert recorded_call is call
 
 
+async def test_a_call_that_ties_its_burst_on_the_clock_still_follows_its_speech(duplex) -> None:
+    """On a coarse clock the burst's message and a call that joins it share a timestamp; the
+    call still goes after the speech it interrupted."""
+    fake, session, _ = duplex
+    fake.push(0.001, count=20)
+    fake.push(0.3, count=3)
+    await _settle()
+    fake.say("Let me check.", start_ms=2000, end_ms=2400)
+    fake.push(0.3, count=1)
+    assert session._burst is not None
+    call = llm.FunctionCall(
+        call_id="c1", name="lookup", arguments="{}", created_at=session._burst.opened_at
+    )
+    fake.emit("function_call", call)
+    fake.push(0.001, count=8)
+    await _settle()
+
+    assert [type(i).__name__ for i in session.chat_ctx.items] == ["ChatMessage", "FunctionCall"]
+
+
 async def test_only_what_is_new_reaches_the_model(duplex, caplog) -> None:
     """A context update is diffed against the adapter's own record: the model's speech, which the
     framework hands back under the same ids, is never re-sent, and an edit is logged."""

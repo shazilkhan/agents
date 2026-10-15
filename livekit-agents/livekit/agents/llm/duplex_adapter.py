@@ -513,6 +513,11 @@ class _DuplexRealtimeSession(RealtimeSession):
         self.emit("input_audio_transcription_completed", ev)
 
     def _on_function_call(self, call: FunctionCall) -> None:
+        # a call that joins the burst in flight comes after the speech that opened it; on a coarse
+        # clock (time.time() on Windows before Python 3.13) both can carry the same timestamp, and
+        # the tie would put the burst's message after the call
+        if self._burst is not None and call.created_at <= self._burst.opened_at:
+            call.created_at = self._burst.opened_at + 1e-6
         self._chat_ctx.insert(call)
         # a call joins the burst in flight so the tool runs while the model talks; alone, it is a
         # generation of its own, over as soon as it is delivered
